@@ -11,6 +11,7 @@ import boto3
 import json
 import argparse
 import sys
+import os
 from botocore.exceptions import ClientError
 from typing import Optional, Tuple, Dict, List
 
@@ -89,7 +90,7 @@ def export_full_rule_group(rule_group_response: dict) -> dict:
     Export the full rule group configuration.
     """
     rule_group = rule_group_response.get('RuleGroup', {})
-    lock_token = rule_group_response.get('LockToken', '')
+    # Don't export lock token as it's sensitive and time-limited
     
     export_data = {
         "RuleGroup": {
@@ -100,8 +101,7 @@ def export_full_rule_group(rule_group_response: dict) -> dict:
             "Rules": rule_group.get('Rules', []),
             "VisibilityConfig": rule_group.get('VisibilityConfig'),
             "Description": rule_group.get('Description', ''),
-        },
-        "LockToken": lock_token
+        }
     }
     
     # Add optional fields if they exist
@@ -115,16 +115,34 @@ def export_full_rule_group(rule_group_response: dict) -> dict:
 
 def save_to_file(data: dict, filename: str, pretty: bool = True):
     """Save data to a JSON file."""
-    with open(filename, 'w', encoding='utf-8') as f:
-        if pretty:
-            json.dump(data, f, indent=2, default=str)
-        else:
-            json.dump(data, f, default=str)
-    print(f"Successfully saved to {filename}")
+    # Validate path to prevent directory traversal
+    abs_path = os.path.abspath(filename)
+    if not abs_path.startswith(os.path.abspath(os.getcwd())):
+        if '..' in filename or filename.startswith('/'):
+            print(f"Error: Invalid file path '{filename}' - path traversal detected")
+            sys.exit(1)
+    
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            if pretty:
+                json.dump(data, f, indent=2, default=str)
+            else:
+                json.dump(data, f, default=str)
+        print(f"Successfully saved to {filename}")
+    except (IOError, OSError, PermissionError) as e:
+        print(f"Error: Failed to write to file '{filename}': {e}")
+        sys.exit(1)
 
 
 def load_from_file(filename: str) -> dict:
     """Load data from a JSON file."""
+    # Validate path to prevent directory traversal
+    abs_path = os.path.abspath(filename)
+    if not abs_path.startswith(os.path.abspath(os.getcwd())):
+        if '..' in filename or filename.startswith('/'):
+            print(f"Error: Invalid file path '{filename}' - path traversal detected")
+            sys.exit(1)
+    
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -277,17 +295,21 @@ def extract_rules_from_json(data: dict) -> Tuple[List[Dict], Optional[Dict], Opt
     Returns:
         Tuple of (rules, visibility_config, custom_response_bodies, description)
     """
+    if not isinstance(data, (dict, list)):
+        print("Error: Invalid JSON format - expected dict or list")
+        sys.exit(1)
+    
     rules = []
     visibility_config = None
     custom_response_bodies = None
     description = None
     
     # Format 1: Just rules array {"Rules": [...]}
-    if 'Rules' in data and isinstance(data['Rules'], list):
+    if isinstance(data, dict) and 'Rules' in data and isinstance(data['Rules'], list):
         rules = data['Rules']
     
     # Format 2: Full export {"RuleGroup": {...}}
-    elif 'RuleGroup' in data:
+    elif isinstance(data, dict) and 'RuleGroup' in data:
         rule_group = data['RuleGroup']
         rules = rule_group.get('Rules', [])
         visibility_config = rule_group.get('VisibilityConfig')
@@ -317,7 +339,10 @@ def do_export(args):
         
         print(f"Fetching rule group by ARN: {args.arn}")
         response = get_rule_group_by_arn(waf_client, args.arn)
-        rule_group_name = response['RuleGroup']['Name']
+        rule_group_name = response.get('RuleGroup', {}).get('Name')
+        if not rule_group_name:
+            print("Error: Could not retrieve rule group name from response")
+            sys.exit(1)
     else:
         if not args.scope:
             print("Error: --scope is required when not using --arn")
@@ -486,7 +511,6 @@ def do_create(args):
         print(f"  Name: {summary['Name']}")
         print(f"  ID: {summary['Id']}")
         print(f"  ARN: {summary['ARN']}")
-        print(f"  Lock Token: {summary['LockToken']}")
         
     except ClientError as e:
         error_code = e.response['Error']['Code']
@@ -600,7 +624,6 @@ def do_update(args):
         )
         
         print(f"\n✓ Rule group updated successfully!")
-        print(f"  New Lock Token: {response['NextLockToken']}")
         
     except ClientError as e:
         error_code = e.response['Error']['Code']
