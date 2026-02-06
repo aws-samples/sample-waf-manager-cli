@@ -213,10 +213,46 @@ cd waf_manager
 pip install boto3
 ```
 
-1. Ensure the script is executable:
+3. Make the script executable (optional):
 ```bash
 chmod +x waf_manager.py
 ```
+
+## Getting Help
+
+The tool has comprehensive built-in help for all commands and options:
+
+```bash
+# General help - shows all available commands
+python waf_manager.py --help
+python waf_manager.py -h
+
+# Command-specific help with detailed examples
+python waf_manager.py export --help
+python waf_manager.py create --help
+python waf_manager.py update --help
+python waf_manager.py clone --help
+python waf_manager.py list --help
+```
+
+### Quick Command Reference
+
+| Command | Purpose | Required Flags |
+|---------|---------|----------------|
+| `export` | Export rule group to JSON | `--scope`, `--region` (or `--arn`) |
+| `create` | Create new rule group from JSON | `--scope`, `--name`, `--input` |
+| `update` | Update existing rule group | `--scope`, `--name`, `--id`, `--input` |
+| `clone` | Clone rule group | `--scope`, `--new-name` |
+| `list` | List all rule groups | `--scope` |
+
+### Common Flags
+
+- `--scope`: `REGIONAL` (ALB/API Gateway) or `CLOUDFRONT` (CloudFront distributions)
+- `--region`: AWS region (default: `us-east-1`, always `us-east-1` for CloudFront)
+- `--profile`: AWS profile name from `~/.aws/credentials`
+- `--yes` / `-y`: Skip confirmation prompts (useful for automation)
+- `--output` / `-o`: Specify output filename
+- `--input` / `-i`: Specify input JSON file
 
 ## Usage
 

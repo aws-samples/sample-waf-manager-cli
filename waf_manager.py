@@ -700,10 +700,24 @@ def do_clone(args):
 def main():
     parser = argparse.ArgumentParser(
         description='AWS WAF Rule Group Export, Import, and Management Tool',
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Common Usage:
+  # Show help for a specific command
+  python waf_manager.py export --help
+  python waf_manager.py create --help
+  
+  # Quick export
+  python waf_manager.py export --scope REGIONAL --region us-east-1
+  
+  # Quick create
+  python waf_manager.py create --scope REGIONAL --region us-east-1 --name MyRules --input rules.json
+
+For detailed examples, use --help with any command (export, create, update, clone, list)
+        """
     )
     
-    subparsers = parser.add_subparsers(dest='command', help='Commands')
+    subparsers = parser.add_subparsers(dest='command', help='Available commands: export, create, update, clone, list')
     
     # ========== EXPORT COMMAND ==========
     export_parser = subparsers.add_parser(
@@ -712,28 +726,35 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Interactive mode
-  python waf_manager.py export --scope REGIONAL --region us-west-2
+  # Interactive mode - select from list
+  python waf_manager.py export --scope REGIONAL --region us-east-1
 
   # Export by name and ID
-  python waf_manager.py export --scope REGIONAL --region us-west-2 --name MyRuleGroup --id abc123
+  python waf_manager.py export --scope REGIONAL --region us-east-1 --name MyRuleGroup --id abc123
 
-  # Export by ARN
-  python waf_manager.py export --arn arn:aws:wafv2:us-west-2:123456789:regional/rulegroup/MyRuleGroup/abc123
+  # Export by ARN (auto-detects region)
+  python waf_manager.py export --arn arn:aws:wafv2:us-east-1:123456789:regional/rulegroup/MyRuleGroup/abc123
 
-  # Export full configuration
-  python waf_manager.py export --scope REGIONAL --region us-west-2 --full
+  # Export full configuration (includes metadata)
+  python waf_manager.py export --scope REGIONAL --region us-east-1 --name MyRuleGroup --id abc123 --full
+
+  # List all rule groups
+  python waf_manager.py export --scope REGIONAL --region us-east-1 --list
         """
     )
-    export_parser.add_argument('--scope', choices=['REGIONAL', 'CLOUDFRONT'])
-    export_parser.add_argument('--region', default='us-east-1')
-    export_parser.add_argument('--name', help='Rule group name')
-    export_parser.add_argument('--id', help='Rule group ID')
-    export_parser.add_argument('--arn', help='Rule group ARN')
-    export_parser.add_argument('--output', '-o', help='Output JSON filename')
-    export_parser.add_argument('--full', action='store_true', help='Export full config')
-    export_parser.add_argument('--list', action='store_true', help='List rule groups')
-    export_parser.add_argument('--profile', help='AWS profile name')
+    export_parser.add_argument('--scope', choices=['REGIONAL', 'CLOUDFRONT'], 
+                               help='WAF scope: REGIONAL for ALB/API Gateway, CLOUDFRONT for CloudFront distributions')
+    export_parser.add_argument('--region', default='us-east-1', 
+                               help='AWS region (default: us-east-1, always us-east-1 for CLOUDFRONT scope)')
+    export_parser.add_argument('--name', help='Rule group name (use with --id, or omit for interactive selection)')
+    export_parser.add_argument('--id', help='Rule group ID (use with --name, or omit for interactive selection)')
+    export_parser.add_argument('--arn', help='Rule group ARN (alternative to --name/--id, auto-detects region)')
+    export_parser.add_argument('--output', '-o', help='Output JSON filename (default: auto-generated from rule group name)')
+    export_parser.add_argument('--full', action='store_true', 
+                               help='Export full configuration including metadata, lock token, and optional fields')
+    export_parser.add_argument('--list', action='store_true', 
+                               help='List all rule groups in the scope and exit (no export)')
+    export_parser.add_argument('--profile', help='AWS profile name from ~/.aws/credentials')
     
     # ========== CREATE COMMAND ==========
     create_parser = subparsers.add_parser(
@@ -742,29 +763,48 @@ Examples:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Create from exported JSON
-  python waf_manager.py create --scope REGIONAL --region us-west-2 \\
+  # Create from exported JSON (auto-calculate capacity)
+  python waf_manager.py create --scope REGIONAL --region us-east-1 \\
       --name NewRuleGroup --input exported-rules.json
 
   # Create with specific capacity
-  python waf_manager.py create --scope REGIONAL --region us-west-2 \\
+  python waf_manager.py create --scope REGIONAL --region us-east-1 \\
       --name NewRuleGroup --input rules.json --capacity 500
 
-  # Create with tags
-  python waf_manager.py create --scope REGIONAL --region us-west-2 \\
-      --name NewRuleGroup --input rules.json --tags Environment=prod Team=security
+  # Create with capacity buffer (adds 20% safety margin)
+  python waf_manager.py create --scope REGIONAL --region us-east-1 \\
+      --name NewRuleGroup --input rules.json --capacity-buffer 20
+
+  # Create with tags and description
+  python waf_manager.py create --scope REGIONAL --region us-east-1 \\
+      --name NewRuleGroup --input rules.json \\
+      --description "Production WAF rules" \\
+      --tags Environment=prod Team=security Owner=john.doe
+
+  # Create without confirmation prompt (for automation)
+  python waf_manager.py create --scope REGIONAL --region us-east-1 \\
+      --name NewRuleGroup --input rules.json --yes
         """
     )
-    create_parser.add_argument('--scope', choices=['REGIONAL', 'CLOUDFRONT'], required=True)
-    create_parser.add_argument('--region', default='us-east-1')
-    create_parser.add_argument('--name', required=True, help='New rule group name')
-    create_parser.add_argument('--input', '-i', required=True, help='Input JSON file')
-    create_parser.add_argument('--capacity', type=int, help='Rule group capacity (auto-calculated if not specified)')
-    create_parser.add_argument('--capacity-buffer', type=int, default=0, help='Percentage buffer to add to calculated capacity')
-    create_parser.add_argument('--description', help='Rule group description')
-    create_parser.add_argument('--tags', nargs='+', help='Tags in Key=Value format')
-    create_parser.add_argument('--yes', '-y', action='store_true', help='Skip confirmation')
-    create_parser.add_argument('--profile', help='AWS profile name')
+    create_parser.add_argument('--scope', choices=['REGIONAL', 'CLOUDFRONT'], required=True,
+                               help='WAF scope: REGIONAL for ALB/API Gateway, CLOUDFRONT for CloudFront distributions')
+    create_parser.add_argument('--region', default='us-east-1',
+                               help='AWS region (default: us-east-1, always us-east-1 for CLOUDFRONT scope)')
+    create_parser.add_argument('--name', required=True, 
+                               help='Name for the new rule group (must be unique within scope)')
+    create_parser.add_argument('--input', '-i', required=True, 
+                               help='Input JSON file containing rules (supports multiple formats)')
+    create_parser.add_argument('--capacity', type=int, 
+                               help='Rule group capacity in WCUs (auto-calculated if not specified, max: 1500)')
+    create_parser.add_argument('--capacity-buffer', type=int, default=0, 
+                               help='Percentage buffer to add to calculated capacity (e.g., 20 for 20%% extra)')
+    create_parser.add_argument('--description', 
+                               help='Description for the rule group (optional, max 256 characters)')
+    create_parser.add_argument('--tags', nargs='+', 
+                               help='Tags in Key=Value format (space-separated, e.g., Env=prod Team=security)')
+    create_parser.add_argument('--yes', '-y', action='store_true', 
+                               help='Skip confirmation prompt (useful for automation/CI-CD)')
+    create_parser.add_argument('--profile', help='AWS profile name from ~/.aws/credentials')
     
     # ========== UPDATE COMMAND ==========
     update_parser = subparsers.add_parser(
@@ -773,19 +813,38 @@ Examples:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Update existing rule group
-  python waf_manager.py update --scope REGIONAL --region us-west-2 \\
+  # Update existing rule group with new rules
+  python waf_manager.py update --scope REGIONAL --region us-east-1 \\
       --name MyRuleGroup --id abc123 --input new-rules.json
+
+  # Update with new description
+  python waf_manager.py update --scope REGIONAL --region us-east-1 \\
+      --name MyRuleGroup --id abc123 --input rules.json \\
+      --description "Updated rules for Q1 2026"
+
+  # Update without confirmation (automation)
+  python waf_manager.py update --scope REGIONAL --region us-east-1 \\
+      --name MyRuleGroup --id abc123 --input rules.json --yes
+
+Note: You cannot increase capacity of an existing rule group. If new rules require
+more capacity, you must create a new rule group with higher capacity.
         """
     )
-    update_parser.add_argument('--scope', choices=['REGIONAL', 'CLOUDFRONT'], required=True)
-    update_parser.add_argument('--region', default='us-east-1')
-    update_parser.add_argument('--name', required=True, help='Rule group name')
-    update_parser.add_argument('--id', required=True, help='Rule group ID')
-    update_parser.add_argument('--input', '-i', required=True, help='Input JSON file')
-    update_parser.add_argument('--description', help='New description')
-    update_parser.add_argument('--yes', '-y', action='store_true', help='Skip confirmation')
-    update_parser.add_argument('--profile', help='AWS profile name')
+    update_parser.add_argument('--scope', choices=['REGIONAL', 'CLOUDFRONT'], required=True,
+                               help='WAF scope: REGIONAL for ALB/API Gateway, CLOUDFRONT for CloudFront distributions')
+    update_parser.add_argument('--region', default='us-east-1',
+                               help='AWS region (default: us-east-1, always us-east-1 for CLOUDFRONT scope)')
+    update_parser.add_argument('--name', required=True, 
+                               help='Name of the rule group to update')
+    update_parser.add_argument('--id', required=True, 
+                               help='ID of the rule group to update (required for lock token)')
+    update_parser.add_argument('--input', '-i', required=True, 
+                               help='Input JSON file containing new rules')
+    update_parser.add_argument('--description', 
+                               help='New description for the rule group (optional)')
+    update_parser.add_argument('--yes', '-y', action='store_true', 
+                               help='Skip confirmation prompt (useful for automation/CI-CD)')
+    update_parser.add_argument('--profile', help='AWS profile name from ~/.aws/credentials')
     
     # ========== CLONE COMMAND ==========
     clone_parser = subparsers.add_parser(
@@ -795,37 +854,68 @@ Examples:
         epilog="""
 Examples:
   # Clone to same region with new name
-  python waf_manager.py clone --scope REGIONAL --region us-west-2 \\
+  python waf_manager.py clone --scope REGIONAL --region us-east-1 \\
       --source-name OldRuleGroup --source-id abc123 --new-name NewRuleGroup
 
-  # Clone to different region
-  python waf_manager.py clone --scope REGIONAL --region us-west-2 \\
+  # Clone to different region (disaster recovery)
+  python waf_manager.py clone --scope REGIONAL --region us-east-1 \\
       --source-name MyRuleGroup --source-id abc123 \\
       --new-name MyRuleGroup-DR --dest-region us-east-1
 
   # Interactive source selection
-  python waf_manager.py clone --scope REGIONAL --region us-west-2 --new-name ClonedGroup
+  python waf_manager.py clone --scope REGIONAL --region us-east-1 --new-name ClonedGroup
+
+  # Clone with custom capacity and description
+  python waf_manager.py clone --scope REGIONAL --region us-east-1 \\
+      --source-name ProdRules --source-id abc123 \\
+      --new-name DevRules --capacity 1000 \\
+      --description "Development environment rules"
         """
     )
-    clone_parser.add_argument('--scope', choices=['REGIONAL', 'CLOUDFRONT'], required=True)
-    clone_parser.add_argument('--region', default='us-east-1', help='Source region')
-    clone_parser.add_argument('--source-name', help='Source rule group name')
-    clone_parser.add_argument('--source-id', help='Source rule group ID')
-    clone_parser.add_argument('--new-name', required=True, help='New rule group name')
-    clone_parser.add_argument('--dest-region', help='Destination region (default: same as source)')
-    clone_parser.add_argument('--capacity', type=int, help='Override capacity')
-    clone_parser.add_argument('--description', help='New description')
-    clone_parser.add_argument('--yes', '-y', action='store_true', help='Skip confirmation')
-    clone_parser.add_argument('--profile', help='AWS profile name')
+    clone_parser.add_argument('--scope', choices=['REGIONAL', 'CLOUDFRONT'], required=True,
+                              help='WAF scope: REGIONAL for ALB/API Gateway, CLOUDFRONT for CloudFront distributions')
+    clone_parser.add_argument('--region', default='us-east-1', 
+                              help='Source region (default: us-east-1)')
+    clone_parser.add_argument('--source-name', 
+                              help='Source rule group name (omit for interactive selection)')
+    clone_parser.add_argument('--source-id', 
+                              help='Source rule group ID (omit for interactive selection)')
+    clone_parser.add_argument('--new-name', required=True, 
+                              help='Name for the cloned rule group (must be unique)')
+    clone_parser.add_argument('--dest-region', 
+                              help='Destination region (default: same as source region)')
+    clone_parser.add_argument('--capacity', type=int, 
+                              help='Override capacity for cloned rule group (default: same as source)')
+    clone_parser.add_argument('--description', 
+                              help='Description for cloned rule group (default: "Cloned from <source>")')
+    clone_parser.add_argument('--yes', '-y', action='store_true', 
+                              help='Skip confirmation prompt (useful for automation/CI-CD)')
+    clone_parser.add_argument('--profile', help='AWS profile name from ~/.aws/credentials')
     
     # ========== LIST COMMAND ==========
     list_parser = subparsers.add_parser(
         'list',
-        help='List all WAF rule groups'
+        help='List all WAF rule groups',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # List all REGIONAL rule groups in us-east-1
+  python waf_manager.py list --scope REGIONAL --region us-east-1
+
+  # List all CLOUDFRONT rule groups
+  python waf_manager.py list --scope CLOUDFRONT
+
+  # List using specific AWS profile
+  python waf_manager.py list --scope REGIONAL --region us-east-1 --profile production
+
+Output includes: Name, ID, and ARN for each rule group
+        """
     )
-    list_parser.add_argument('--scope', choices=['REGIONAL', 'CLOUDFRONT'], required=True)
-    list_parser.add_argument('--region', default='us-east-1')
-    list_parser.add_argument('--profile', help='AWS profile name')
+    list_parser.add_argument('--scope', choices=['REGIONAL', 'CLOUDFRONT'], required=True,
+                            help='WAF scope: REGIONAL for ALB/API Gateway, CLOUDFRONT for CloudFront distributions')
+    list_parser.add_argument('--region', default='us-east-1',
+                            help='AWS region (default: us-east-1, always us-east-1 for CLOUDFRONT scope)')
+    list_parser.add_argument('--profile', help='AWS profile name from ~/.aws/credentials')
     
     args = parser.parse_args()
     
