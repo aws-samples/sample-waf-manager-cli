@@ -125,14 +125,14 @@ def export_full_rule_group(rule_group_response: dict) -> dict:
 def save_to_file(data: dict, filename: str, pretty: bool = True):
     """Save data to a JSON file."""
     # Validate path to prevent directory traversal
-    abs_path = os.path.abspath(filename)
-    if not abs_path.startswith(os.path.abspath(os.getcwd())):
-        if '..' in filename or filename.startswith('/'):
-            print(f"Error: Invalid file path '{filename}' - path traversal detected")
-            sys.exit(1)
+    abs_path = os.path.realpath(os.path.abspath(filename))
+    cwd = os.path.realpath(os.path.abspath(os.getcwd()))
+    if not abs_path.startswith(cwd + os.sep) and abs_path != cwd:
+        print(f"Error: Invalid file path '{filename}' - path traversal detected")
+        sys.exit(1)
     
     try:
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(abs_path, 'w', encoding='utf-8') as f:
             if pretty:
                 json.dump(data, f, indent=2, default=str)
             else:
@@ -146,14 +146,14 @@ def save_to_file(data: dict, filename: str, pretty: bool = True):
 def load_from_file(filename: str) -> dict:
     """Load data from a JSON file."""
     # Validate path to prevent directory traversal
-    abs_path = os.path.abspath(filename)
-    if not abs_path.startswith(os.path.abspath(os.getcwd())):
-        if '..' in filename or filename.startswith('/'):
-            print(f"Error: Invalid file path '{filename}' - path traversal detected")
-            sys.exit(1)
+    abs_path = os.path.realpath(os.path.abspath(filename))
+    cwd = os.path.realpath(os.path.abspath(os.getcwd()))
+    if not abs_path.startswith(cwd + os.sep) and abs_path != cwd:
+        print(f"Error: Invalid file path '{filename}' - path traversal detected")
+        sys.exit(1)
     
     try:
-        with open(filename, 'r', encoding='utf-8') as f:
+        with open(abs_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")
@@ -166,7 +166,11 @@ def load_from_file(filename: str) -> dict:
 def interactive_select_rule_group(waf_client, scope: str) -> Tuple[Optional[str], Optional[str]]:
     """Interactively select a rule group from the list."""
     print(f"\nFetching rule groups for scope: {scope}...")
-    rule_groups = list_rule_groups(waf_client, scope)
+    try:
+        rule_groups = list_rule_groups(waf_client, scope)
+    except ClientError as e:
+        print(f"Error: Failed to fetch rule groups: {e}")
+        return None, None
     
     if not rule_groups:
         print("No rule groups found.")
@@ -406,7 +410,7 @@ def do_export(args):
     rule_count = len(export_data.get('Rules', export_data.get('RuleGroup', {}).get('Rules', [])))
     print(f"\nRule Group: {rule_group_name}")
     print(f"Total Rules: {rule_count}")
-    print(f"Capacity: {response['RuleGroup'].get('Capacity', 'N/A')}")
+    print(f"Capacity: {response.get('RuleGroup', {}).get('Capacity', 'N/A')}")
     
     # Save to file
     save_to_file(export_data, output_file)
@@ -515,11 +519,11 @@ def do_create(args):
             custom_response_bodies=custom_response_bodies
         )
         
-        summary = response['Summary']
+        summary = response.get('Summary', {})
         print(f"\n✓ Rule group created successfully!")
-        print(f"  Name: {summary['Name']}")
-        print(f"  ID: {summary['Id']}")
-        print(f"  ARN: {summary['ARN']}")
+        print(f"  Name: {summary.get('Name', 'N/A')}")
+        print(f"  ID: {summary.get('Id', 'N/A')}")
+        print(f"  ARN: {summary.get('ARN', 'N/A')}")
         
     except ClientError as e:
         error_code = e.response['Error']['Code']
@@ -582,7 +586,10 @@ def do_update(args):
     # Check new capacity requirements
     print("Checking capacity requirements...")
     required_capacity = check_capacity(waf_client, args.scope, rules)
-    print(f"Required capacity for new rules: {required_capacity}")
+    if required_capacity == 0:
+        print("Warning: Could not calculate capacity for new rules. Proceeding with caution.")
+    else:
+        print(f"Required capacity for new rules: {required_capacity}")
     
     if required_capacity > current_capacity:
         print(f"\nWarning: New rules require capacity {required_capacity}, but rule group has {current_capacity}")
@@ -675,8 +682,12 @@ def do_clone(args):
             return
     
     print(f"\nFetching source rule group: {source_name}")
-    source = get_rule_group(waf_client, source_name, args.scope, source_id)
-    source_rg = source['RuleGroup']
+    try:
+        source = get_rule_group(waf_client, source_name, args.scope, source_id)
+        source_rg = source['RuleGroup']
+    except ClientError as e:
+        print(f"Error: Could not find source rule group '{source_name}' with ID '{source_id}'")
+        sys.exit(1)
     
     rules = source_rg.get('Rules', [])
     print(f"Found {len(rules)} rules")
@@ -716,11 +727,11 @@ def do_clone(args):
             custom_response_bodies=source_rg.get('CustomResponseBodies')
         )
         
-        summary = response['Summary']
+        summary = response.get('Summary', {})
         print(f"\n✓ Rule group cloned successfully!")
-        print(f"  Name: {summary['Name']}")
-        print(f"  ID: {summary['Id']}")
-        print(f"  ARN: {summary['ARN']}")
+        print(f"  Name: {summary.get('Name', 'N/A')}")
+        print(f"  ID: {summary.get('Id', 'N/A')}")
+        print(f"  ARN: {summary.get('ARN', 'N/A')}")
         
     except ClientError as e:
         error_code = e.response['Error']['Code']
