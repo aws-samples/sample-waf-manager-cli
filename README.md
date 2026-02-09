@@ -24,6 +24,86 @@ This tool provides a streamlined workflow for WAF rule group lifecycle managemen
 - **Support for both REGIONAL and CLOUDFRONT scopes**
 - **ARN-based lookups** for quick exports
 
+## Prerequisites
+
+- Python 3.11+
+- AWS credentials configured (via AWS CLI, environment variables, or IAM role)
+- Appropriate IAM permissions for WAFv2 operations
+
+### Required IAM Permissions
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "wafv2:ListRuleGroups",
+        "wafv2:GetRuleGroup",
+        "wafv2:CreateRuleGroup",
+        "wafv2:UpdateRuleGroup",
+        "wafv2:CheckCapacity"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+## Installation
+
+1. Clone this repository or download the script:
+```bash
+git clone <repository-url>
+cd waf_manager
+```
+
+2. Install required dependencies:
+```bash
+pip install boto3
+```
+
+3. Make the script executable (optional):
+```bash
+chmod +x waf_manager.py
+```
+
+## Getting Help
+
+The tool has comprehensive built-in help for all commands and options:
+
+```bash
+# General help - shows all available commands
+python waf_manager.py --help
+python waf_manager.py -h
+
+# Command-specific help with detailed examples
+python waf_manager.py export --help
+python waf_manager.py create --help
+python waf_manager.py update --help
+python waf_manager.py clone --help
+python waf_manager.py list --help
+```
+
+### Quick Command Reference
+
+| Command | Purpose | Required Flags |
+|---------|---------|----------------|
+| `export` | Export rule group to JSON | `--scope`, `--region` (or `--arn`) |
+| `create` | Create new rule group from JSON | `--scope`, `--name`, `--input` |
+| `update` | Update existing rule group | `--scope`, `--name`, `--id`, `--input` |
+| `clone` | Clone rule group | `--scope`, `--new-name` |
+| `list` | List all rule groups | `--scope` |
+
+### Common Flags
+
+- `--scope`: `REGIONAL` (ALB/API Gateway) or `CLOUDFRONT` (CloudFront distributions)
+- `--region`: AWS region (default: `us-east-1`, always `us-east-1` for CloudFront)
+- `--profile`: AWS profile name from `~/.aws/credentials`
+- `--yes` / `-y`: Skip confirmation prompts (useful for automation)
+- `--output` / `-o`: Specify output filename
+- `--input` / `-i`: Specify input JSON file
 
 ## Use Cases
 
@@ -172,87 +252,6 @@ python waf_manager.py export --scope REGIONAL --region us-east-1 \
 python waf_manager.py update --scope REGIONAL --region us-east-1 \
     --name ProductionRules --id abc123 --input tested-rules.json
 ```
-
-## Prerequisites
-
-- Python 3.11+
-- AWS credentials configured (via AWS CLI, environment variables, or IAM role)
-- Appropriate IAM permissions for WAFv2 operations
-
-### Required IAM Permissions
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "wafv2:ListRuleGroups",
-        "wafv2:GetRuleGroup",
-        "wafv2:CreateRuleGroup",
-        "wafv2:UpdateRuleGroup",
-        "wafv2:CheckCapacity"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-## Installation
-
-1. Clone this repository or download the script:
-```bash
-git clone <repository-url>
-cd waf_manager
-```
-
-2. Install required dependencies:
-```bash
-pip install boto3
-```
-
-3. Make the script executable (optional):
-```bash
-chmod +x waf_manager.py
-```
-
-## Getting Help
-
-The tool has comprehensive built-in help for all commands and options:
-
-```bash
-# General help - shows all available commands
-python waf_manager.py --help
-python waf_manager.py -h
-
-# Command-specific help with detailed examples
-python waf_manager.py export --help
-python waf_manager.py create --help
-python waf_manager.py update --help
-python waf_manager.py clone --help
-python waf_manager.py list --help
-```
-
-### Quick Command Reference
-
-| Command | Purpose | Required Flags |
-|---------|---------|----------------|
-| `export` | Export rule group to JSON | `--scope`, `--region` (or `--arn`) |
-| `create` | Create new rule group from JSON | `--scope`, `--name`, `--input` |
-| `update` | Update existing rule group | `--scope`, `--name`, `--id`, `--input` |
-| `clone` | Clone rule group | `--scope`, `--new-name` |
-| `list` | List all rule groups | `--scope` |
-
-### Common Flags
-
-- `--scope`: `REGIONAL` (ALB/API Gateway) or `CLOUDFRONT` (CloudFront distributions)
-- `--region`: AWS region (default: `us-east-1`, always `us-east-1` for CloudFront)
-- `--profile`: AWS profile name from `~/.aws/credentials`
-- `--yes` / `-y`: Skip confirmation prompts (useful for automation)
-- `--output` / `-o`: Specify output filename
-- `--input` / `-i`: Specify input JSON file
 
 ## Usage
 
