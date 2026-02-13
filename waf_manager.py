@@ -43,7 +43,7 @@ def get_waf_client(scope: str, region: str = 'us-east-1'):
 
 def save_to_file(data: dict, filename: str, pretty: bool = True):
     """Save data to a JSON file."""
-    with open(filename, 'w') as f:
+    with open(filename, 'w', encoding='utf-8') as f:
         if pretty:
             json.dump(data, f, indent=2, default=str)
         else:
@@ -54,7 +54,7 @@ def save_to_file(data: dict, filename: str, pretty: bool = True):
 def load_from_file(filename: str) -> dict:
     """Load data from a JSON file."""
     try:
-        with open(filename, 'r') as f:
+        with open(filename, 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")
