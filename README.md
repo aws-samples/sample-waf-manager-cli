@@ -55,24 +55,126 @@ This tool provides a streamlined workflow for WAF rule group and web ACL lifecyc
 
 ### Required IAM Permissions
 
+The tool requires the following IAM permissions for full functionality:
+
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
+      "Sid": "WAFRuleGroupManagement",
       "Effect": "Allow",
       "Action": [
         "wafv2:ListRuleGroups",
         "wafv2:GetRuleGroup",
         "wafv2:CreateRuleGroup",
         "wafv2:UpdateRuleGroup",
+        "wafv2:DeleteRuleGroup"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "WAFWebACLManagement",
+      "Effect": "Allow",
+      "Action": [
+        "wafv2:ListWebACLs",
+        "wafv2:GetWebACL",
+        "wafv2:CreateWebACL",
+        "wafv2:UpdateWebACL",
+        "wafv2:DeleteWebACL"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "WAFCapacityCheck",
+      "Effect": "Allow",
+      "Action": [
         "wafv2:CheckCapacity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "WAFTagging",
+      "Effect": "Allow",
+      "Action": [
+        "wafv2:TagResource",
+        "wafv2:UntagResource",
+        "wafv2:ListTagsForResource"
       ],
       "Resource": "*"
     }
   ]
 }
 ```
+
+### Minimum Permissions for Read-Only Operations
+
+If you only need to export and list resources (no create/update/delete):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "WAFReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "wafv2:ListRuleGroups",
+        "wafv2:GetRuleGroup",
+        "wafv2:ListWebACLs",
+        "wafv2:GetWebACL",
+        "wafv2:ListTagsForResource"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+### Permissions by Operation
+
+| Operation | Required Permissions |
+|-----------|---------------------|
+| `list` | `wafv2:ListRuleGroups`, `wafv2:ListWebACLs` |
+| `export` | `wafv2:GetRuleGroup`, `wafv2:GetWebACL`, `wafv2:ListTagsForResource` |
+| `export-all` | `wafv2:ListRuleGroups`, `wafv2:GetRuleGroup`, `wafv2:ListWebACLs`, `wafv2:GetWebACL` |
+| `create-rule-group` | `wafv2:CreateRuleGroup`, `wafv2:CheckCapacity`, `wafv2:TagResource` |
+| `update-rule-group` | `wafv2:GetRuleGroup`, `wafv2:UpdateRuleGroup` |
+| `clone-rule-group` | `wafv2:GetRuleGroup`, `wafv2:CreateRuleGroup`, `wafv2:CheckCapacity` |
+| `create-web-acl` | `wafv2:CreateWebACL`, `wafv2:TagResource` |
+| `update-web-acl` | `wafv2:GetWebACL`, `wafv2:UpdateWebACL` |
+| `clone-web-acl` | `wafv2:GetWebACL`, `wafv2:CreateWebACL` |
+
+### Additional Considerations
+
+1. **CloudFront Scope**: For CloudFront-scoped resources, operations must be performed in `us-east-1` region
+2. **Regional Scope**: For Regional resources, permissions apply to the specific region
+3. **Cross-Account**: For cross-account operations, you'll need appropriate assume role permissions
+4. **Resource-Level Permissions**: The examples above use `"Resource": "*"` for simplicity. For production, consider restricting to specific resource ARNs:
+   ```json
+   "Resource": [
+     "arn:aws:wafv2:*:123456789012:*/rulegroup/*",
+     "arn:aws:wafv2:*:123456789012:*/webacl/*"
+   ]
+   ```
+
+### Testing Your Permissions
+
+Test your IAM permissions with a simple list operation:
+
+```bash
+# Test Regional scope
+python waf_manager.py list --scope REGIONAL --region us-east-1
+
+# Test CloudFront scope
+python waf_manager.py list --scope CLOUDFRONT
+```
+
+If you encounter `AccessDeniedException` errors, check:
+1. Your IAM user/role has the required permissions
+2. There are no explicit Deny statements in your policies
+3. Service Control Policies (SCPs) aren't blocking the actions
+4. You're using the correct AWS profile with `--profile` flag
 
 ## Installation
 
